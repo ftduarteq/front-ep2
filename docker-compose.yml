@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: front-ep2
+    ports:
+      - "80:8080"
+    networks:
+      - tienda-network
+
+networks:
+  tienda-network:
+    driver: bridge
