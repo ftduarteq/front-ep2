@@ -1,0 +1,8 @@
+# Ignorar archivos locales en la compilación de la imagen
+node_modules
+npm-debug.log
+.git
+.github
+.gitignore
+README.md
+docker-compose.yml

@@ -1,17 +1,28 @@
+# Nombre del workflow (Aparecerá en la pestaña Actions de GitHub)
 name: CI/CD Tienda Perritos - Frontend
 
+# Define los eventos que dispararán este pipeline
 on:
   push:
+    # Se ejecutará automáticamente cada vez que se haga un push a la rama "deploy"
     branches: [ "deploy" ]
+    paths-ignore:
+      - 'README.md'
 
+# Define los trabajos (jobs) que se ejecutarán
 jobs:
   build-push-deploy-frontend:
+    # Define el sistema operativo del runner (servidor efímero) de GitHub que ejecutará los pasos
     runs-on: ubuntu-latest
 
+    # Secuencia de pasos a ejecutar
     steps:
+    # Paso 1: Descarga el código de nuestro repositorio dentro del runner de GitHub
     - name: Checkout código
       uses: actions/checkout@v3
 
+    # Paso 2: Configura nuestras credenciales de AWS usando los secretos de GitHub
+    # Esto es necesario para poder interactuar con ECR y SSM
     - name: Configurar credenciales AWS
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -20,18 +31,33 @@ jobs:
         aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
         aws-region: ${{ secrets.AWS_REGION }}
 
+    # Paso 3: Inicia sesión en el registro de contenedores de Amazon (ECR)
     - name: Login en Amazon ECR (runner)
       uses: aws-actions/amazon-ecr-login@v1
 
+    # Paso 4: Construye y sube la imagen Docker a Amazon ECR
+        # Construye la imagen leyendo el Dockerfile local y la nombra "tienda-frontend"
+        # Etiqueta la imagen con la URL del repositorio privado en ECR
+        # Sube la imagen a la nube de AWS ECR
     - name: Build imagen Frontend y push a ECR
       run: |
         docker build -t tienda-frontend .
         docker tag tienda-frontend:latest ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest
         docker push ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest
 
+    # Paso 5: Pausa intencional para dar tiempo a que los agentes de AWS SSM estabilicen conexiones 
+    # (Útil tras un reinicio masivo de instancias EC2, previene el estado "Undeliverable")
     - name: Pausa de estabilización SSM
       run: sleep 60
 
+    # Paso 6: Orquesta el despliegue dentro del servidor EC2 usando SSM (Zero Trust / Sin SSH)
+            # Envía un comando a la instancia EC2 sin necesidad de abrir puertos
+            # Loguea el demonio Docker del EC2 en Amazon ECR para poder descargar la imagen privada
+            # Descarga la imagen recién subida desde ECR al EC2
+            # Detiene el contenedor antiguo (si existe) sin arrojar error si falla
+            # Elimina el contenedor antiguo (si existe) sin arrojar error si falla
+            # Levanta el nuevo contenedor, mapeando el puerto 80 del servidor al 8080 del contenedor Nginx
+            # Devuelve la salida en texto plano
     - name: Desplegar Frontend vía SSM
       run: |
         aws ssm send-command \
@@ -39,8 +65,9 @@ jobs:
           --document-name "AWS-RunShellScript" \
           --comment "Actualizar tienda-frontend desde ECR" \
           --parameters '{"commands":[
-            "set -e",
-            "export PATH=$PATH:/usr/local/bin",
+            "set -e", # Hace que el script aborte si ocurre un error
+            "export PATH=$PATH:/usr/local/bin", # Asegura que docker y aws cli estén en el PATH
+
             "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | sudo docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}",
             "sudo docker pull ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest",
             "sudo docker stop tienda-frontend || true",
@@ -48,4 +75,3 @@ jobs:
             "sudo docker run -d --name tienda-frontend -p 80:8080 ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest"
           ]}' \
           --output text
-          
