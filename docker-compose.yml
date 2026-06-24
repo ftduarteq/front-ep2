@@ -1,15 +1,32 @@
+# Define la versión de la sintaxis de Docker Compose que estamos utilizando
 version: '3.8'
+
+# Sección principal donde se definen todos los contenedores (servicios) que levantaremos
 services:
+  # Definimos nuestro servicio para la interfaz web (el frontend)
   frontend:
+    # Bloque de compilación: indica a Docker Compose cómo construir la imagen localmente
     build:
+      # Contexto: "." significa que usará el directorio actual donde está este docker-compose.yml
       context: .
+      # Especifica explícitamente el nombre del archivo Dockerfile a leer
       dockerfile: Dockerfile
+      
+    # Asigna un nombre humano fácil de recordar al contenedor una vez que esté corriendo
     container_name: front-ep2
+    
+    # Mapeo de puertos ("Host:Contenedor"). 
+    # Expone el puerto 8080 interno de Nginx hacia el puerto 80 externo (HTTP estándar) de tu máquina local
     ports:
       - "80:8080"
+      
+    # Conecta este contenedor a la red virtual "tienda-network" para poder hablar con el backend
     networks:
       - tienda-network
 
+# Definición de las redes virtuales que orquestará Docker Compose
 networks:
+  # Crea una red llamada "tienda-network"
   tienda-network:
+    # Usa el driver "bridge", que simula una red LAN virtual interna entre los contenedores
     driver: bridge
